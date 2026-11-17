@@ -1,0 +1,67 @@
+name: L6028 ROM-free PCM playback proof
+
+on:
+  push:
+    branches:
+      - lab/l6028-capture
+    paths:
+      - '.github/workflows/l6028-playback-proof.yml'
+      - 'src/mame/akai/l6028lab.cpp'
+      - 'src/mame/mame.lst'
+      - 'src/devices/sound/l7a1045_l6028_dsp_a.*'
+      - 'scripts/*l6028*.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pcm-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout capture branch (never pull Akai ROM bytes)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Install MAME Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libasound2-dev libxinerama-dev libxi-dev qt6-base-dev qt6-base-dev-tools
+      - name: Verify Python capture utilities against synthetic fixtures
+        run: |
+          python3 scripts/test_l6028_capture_protocol.py
+          python3 scripts/test_l6028_trace_to_wav.py
+          python3 scripts/test_l6028_fixture_check.py
+          python3 scripts/test_mpc2000xl_rom_audit.py
+      - name: Build focused L6028 MAME machine (diagnostic taps ON)
+        env:
+          ARCHOPTS: -DL6028_CAPTURE_TRACE=1
+        run: |
+          make -j3 SOURCES=src/mame/akai/l6028lab.cpp SUBTARGET=l6028lab REGENIE=1
+      - name: Check machine registration
+        run: |
+          ./mamel6028lab -listfull l6028lab
+      - name: Render 2-voice fixture using L6028 model
+        env:
+          SDL_AUDIODRIVER: dummy
+          SDL_VIDEODRIVER: dummy
+        run: |
+          mkdir -p l6028-proof
+          ./mamel6028lab l6028lab -log -seconds_to_run 1 -throttle 0 -video none -sound none > l6028-proof/console.log 2>&1
+          cp error.log l6028-proof/error.log
+      - name: Check 10-channel trace and export exact MAME float32 output
+        run: |
+          python3 scripts/l6028_fixture_check.py l6028-proof/error.log --require-trace
+          python3 scripts/l6028_tap_summary.py l6028-proof/error.log > l6028-proof/summary.txt
+          python3 scripts/l6028_trace_to_wav.py l6028-proof/error.log --channels stereo --output l6028-proof/main-f32.wav
+          python3 scripts/l6028_trace_to_wav.py l6028-proof/error.log --channels all --output l6028-proof/all10-f32.wav
+      - name: Upload diagnostic evidence whether green or red
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: l6028-pcm-proof-${{ github.run_number }}
+          path: |
+            l6028-proof/
+          if-no-files-found: warn
+          retention-days: 14

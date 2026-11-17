@@ -52,3 +52,11 @@ py scripts/l6028_fixture_check.py error.log --require-trace
 ```
 
 The final command requires a capture-enabled DSP build, verifies both key-on events are separated by 220 internal audio frames, checks ten complete output channels and rejects all-silent main PCM. These scripts have **not** executed the MAME machine or established a bit-exact hardware result. The diagnostic MAME machine is registered without MAME's `MACHINE_NOT_WORKING` warning screen to allow headless validation; research limitations still apply.
+
+## Automated GitHub Actions build / PCM gate
+
+The optional branch-scoped workflow [`l6028-playback-proof.yml`](../../../.github/workflows/l6028-playback-proof.yml) is committed alongside this fixture. On push to `lab/l6028-capture`, if GitHub Actions are enabled for the fork, it installs Linux MAME dependencies, runs the Python tests, compiles **only the L6028 diagnostic driver**, executes its two-voice test, and uploads the machine log and exact MAME float32 stereo/all-10-channel WAV files.
+
+The build uses `ARCHOPTS=-DL6028_CAPTURE_TRACE=1` to enable taps in the actual L6028 translation unit. It does **not** upload proprietary firmware or assert silicon identity. A green workflow is needed before claiming the rendered PCM path works. To compare trace-on versus trace-off, follow with the same build with no `ARCHOPTS` define and compare exact output bits; the workflow does not do that additional differential build yet.
+
+Check `Actions → L6028 ROM-free PCM playback proof` in GitHub. If no run is recorded, use the documented MSYS2 local build instead. This workflow has no background agent; it runs only through GitHub's own Actions service.
