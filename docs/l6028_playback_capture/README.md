@@ -67,3 +67,17 @@ Add a focused deterministic L6028 chip harness: load signed 16-bit samples into 
 - **Output semantics**: The device uses `stream.add_int(..., 32768)`, which converts integer voice contributions into MAME's float32 output buffer. `mix_output f32bits` is an exact representation of those MAME samples after voice sums, before speaker routing. It is not verified bit-exact Akai digital output.
 - **Required playback path**: A dedicated chip-level fixture must provide PCM RAM, a deterministic register-write tape and a reproducible stream render, then compare trace/no-trace and unmodified-reference results. Do not conclude anything about presentation until this fixture is producing and testing samples.
 - **Legal**: no proprietary Akai ROMs are bundled; source code from the MAME fork retains its licensing.
+
+## Listening/output inspection
+
+When a trace-enabled MAME build has produced a real `error.log`, convert its *post-voice-mix MAME output* without changing any sample bit patterns:
+
+```powershell
+py scripts/l6028_tap_summary.py error.log
+py scripts/test_l6028_capture_protocol.py
+py scripts/test_l6028_trace_to_wav.py
+py scripts/l6028_trace_to_wav.py error.log --output l6028-stereo-f32.wav
+py scripts/l6028_trace_to_wav.py error.log --output l6028-all10-f32.wav --channels all
+```
+
+The WAV exporter is strict: each output frame must contain all ten channels, exactly once, with no missing frames. A failed or incomplete trace is **not** turned into invented silence. Exported WAV uses WAVE_FORMAT_IEEE_FLOAT and exact 32-bit patterns from `mix_output`. This is a diagnostic representation of MAME's mix buffer, *not a verified hardware DAC stream*. These commands do **not** produce sound until an actual MAME chip run or fixture has produced trace records.
