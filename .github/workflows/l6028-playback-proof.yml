@@ -51,7 +51,7 @@ jobs:
         run: |
           mkdir -p l6028-proof
           set +e
-          ./l6028lab l6028lab -log -seconds_to_run 1 -throttle 0 -video none -sound none > l6028-proof/console.log 2>&1
+          ./l6028lab l6028lab -log -seconds_to_run 1 -nothrottle -video none -sound none > l6028-proof/console.log 2>&1
           status=$?
           set -e
           if test -f error.log; then cp error.log l6028-proof/error.log; fi

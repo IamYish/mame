@@ -24,7 +24,7 @@ make -j8 SOURCES=src/mame/akai/l6028lab.cpp SUBTARGET=l6028lab
 The Linux source-filtered build linked the executable as `l6028lab` in GitHub Actions. Example:
 
 ```bash
-./l6028lab l6028lab -log -seconds_to_run 1 -throttle 0 -video none -wavwrite l6028-mame-mix.wav
+./l6028lab l6028lab -log -seconds_to_run 1 -nothrottle -video none -wavwrite l6028-mame-mix.wav
 ```
 
 Alternatively use `./mame l6028lab ...` if building the normal MAME target. In `error.log`, verify `L6028_LAB_BEGIN`, `L6028_LAB_OVERLAP` and `L6028_LAB_DONE`. The first trace is a **MAME mixer output**, not a verified Akai DAC-input capture.
@@ -69,3 +69,7 @@ The first GitHub Actions build failed when compiling the lab driver, before any 
 ## Native build outcome 2 — compiler and linker PASS
 
 The follow-up job (GitHub Actions run `44086925666`, commit `93cb8289`) successfully compiled `src/mame/akai/l6028lab.cpp` **and** `l7a1045_l6028_dsp_a.cpp`, generated exactly one driver and linked `l6028lab`. Runtime inspection failed with exit code 127 only because the workflow invoked `./mamel6028lab`, which is not the linked filename. The dedicated CI now executes `./l6028lab` and copies `error.log` for diagnosis even when a runtime error occurs. No audio was rendered during the preceding failed CI run.
+
+## Native build outcome 3 — runtime argument corrected
+
+In Actions run `44089441552` at commit `78ef357e`, the lab's C++ code compiled, linked and passed `./l6028lab -listfull l6028lab`. The subsequent run ended with exit code 3 and its retained `console.log` contained only `Error: unknown option: 0`. This came from using the unsupported `-throttle 0` command syntax. The next run uses MAME's supported `-nothrottle` switch. The machine had **not started processing PCM** in the failed run.
