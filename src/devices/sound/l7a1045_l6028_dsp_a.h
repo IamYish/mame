@@ -5,6 +5,12 @@
 
 #pragma once
 
+// L6028 playback-lab capture. Off by default: no additional runtime work.
+// Enable using -DL6028_CAPTURE_TRACE=1 in a diagnostic build.
+#ifndef L6028_CAPTURE_TRACE
+#define L6028_CAPTURE_TRACE 0
+#endif
+
 #include "machine/timer.h"
 
 class l7a1045_sound_device : public device_t,
@@ -85,6 +91,11 @@ private:
 	l7a1045_voice   m_voice[NUM_VOICES];
 	uint32_t        m_key;
 	uint16_t        m_control;
+#if L6028_CAPTURE_TRACE
+	uint64_t        m_capture_frame = 0;
+	uint64_t        m_capture_read_frame = 0;
+	uint8_t         m_capture_voice = 0;
+#endif
 	emu_timer       *m_dma_timer;
 
 	uint8_t m_cur_channel;

@@ -147,6 +147,13 @@
 #include "l7a1045_l6028_dsp_a.h"
 #include "debugger.h"
 
+// Capture never executes (or changes the device layout) in normal builds.
+#if L6028_CAPTURE_TRACE
+#define L6028_CAPTURE(...) logerror(__VA_ARGS__)
+#else
+#define L6028_CAPTURE(...) do { } while (0)
+#endif
+
 #include <array>
 #include <cmath>
 #include <numbers>
@@ -302,11 +309,21 @@ void l7a1045_sound_device::device_start()
 	save_item(NAME(m_cur_channel));
 	save_item(NAME(m_cur_register));
 	save_item(NAME(m_regs));
+#if L6028_CAPTURE_TRACE
+	save_item(NAME(m_capture_frame));
+	save_item(NAME(m_capture_read_frame));
+	save_item(NAME(m_capture_voice));
+#endif
 }
 
 void l7a1045_sound_device::device_reset()
 {
 	m_key = 0;
+#if L6028_CAPTURE_TRACE
+	m_capture_frame = 0;
+	m_capture_read_frame = 0;
+	m_capture_voice = 0;
+#endif
 	for (auto &voice : m_voice)
 	{
 		voice.history_count = 0;
@@ -341,13 +358,17 @@ int32_t l7a1045_sound_device::read_sample(uint8_t sample_type, uint32_t address)
 {
 	if (sample_type == 0) // 16-bit linear, little-endian RAM
 	{
-		return int16_t(m_cache.read_word(address << 1));
+		const int32_t pcm = int16_t(m_cache.read_word(address << 1));
+		L6028_CAPTURE("L6028_TAP memory frame=%llu voice=%u format=0 address=%08x pcm=%d\n", (unsigned long long)m_capture_read_frame, unsigned(m_capture_voice), address, pcm);
+		return pcm;
 	}
 
 	// 12-bit non-linear ROM, encoded into 8 bits.  Expand before interpolation.
 	const uint8_t data = m_rom_cache.read_byte(address);
 	const int32_t mantissa = (data >> 2) - (BIT(data, 7) ? 0x40 : 0);
-	return mantissa * (1 << (4 + 2 * (~data & 3)));
+	const int32_t pcm = mantissa * (1 << (4 + 2 * (~data & 3)));
+	L6028_CAPTURE("L6028_TAP memory frame=%llu voice=%u format=1 address=%08x pcm=%d\n", (unsigned long long)m_capture_read_frame, unsigned(m_capture_voice), address, pcm);
+	return pcm;
 }
 
 int32_t l7a1045_sound_device::interpolated_sample(const l7a1045_voice &voice, uint32_t address, uint32_t frac)
@@ -396,6 +417,9 @@ int32_t l7a1045_sound_device::interpolated_sample(const l7a1045_voice &voice, ui
 
 void l7a1045_sound_device::sound_stream_update(sound_stream &stream)
 {
+#if L6028_CAPTURE_TRACE
+	const uint64_t trace_base = m_capture_frame;
+#endif
 	for (int i = 0; i < NUM_VOICES; i++)
 	{
 		if (m_key & (1 << i))
@@ -435,7 +459,13 @@ void l7a1045_sound_device::sound_stream_update(sound_stream &stream)
 					advance_history(*vptr, previous_address, advance);
 				}
 
+				// Record the actual memory accesses inside read_sample() and the final interpolation output.
+#if L6028_CAPTURE_TRACE
+				m_capture_read_frame = trace_base + j;
+				m_capture_voice = i;
+#endif
 				const int32_t sample = interpolated_sample(*vptr, start + pos, frac);
+				L6028_CAPTURE("L6028_TAP interpolation frame=%llu voice=%d address=%08x fraction=%03x sample=%d\n", (unsigned long long)(trace_base + j), i, start + pos, frac, sample);
 				frac += step;
 
 				// volume envelope processing
@@ -485,8 +515,10 @@ void l7a1045_sound_device::sound_stream_update(sound_stream &stream)
 				vptr->l += (int64_t(vptr->flt_freq) * vptr->b) >> 15;
 
 				const int32_t fout = vptr->l;
+				L6028_CAPTURE("L6028_TAP filter frame=%llu voice=%d sample=%d envelope=%u cutoff=%u resonance=%u band=%d low=%d output=%d\n", (unsigned long long)(trace_base + j), i, sample, unsigned(vptr->env_volume), unsigned(vptr->flt_freq), unsigned(vptr->flt_resonance), vptr->b, vptr->l, fout);
 				const int64_t left = (fout * (uint64_t(vptr->l_volume) * uint64_t(vptr->env_volume))) >> 24;
 				const int64_t right = (fout * (uint64_t(vptr->r_volume) * uint64_t(vptr->env_volume))) >> 24;
+				L6028_CAPTURE("L6028_TAP voice_output frame=%llu voice=%d lvol=%u rvol=%u env=%u left=%lld right=%lld\n", (unsigned long long)(trace_base + j), i, unsigned(vptr->l_volume), unsigned(vptr->r_volume), unsigned(vptr->env_volume), (long long)left, (long long)right);
 				stream.add_int(0, j, left, 32768);
 				stream.add_int(1, j, right, 32768);
 
@@ -496,6 +528,7 @@ void l7a1045_sound_device::sound_stream_update(sound_stream &stream)
 					if (dest != 0xf)
 					{
 						const int64_t send = (fout * (uint64_t(vptr->send_level) * uint64_t(vptr->env_volume))) >> 24;
+						L6028_CAPTURE("L6028_TAP send frame=%llu voice=%d dest=%d channel=%d send=%lld\n", (unsigned long long)(trace_base + j), i, dest, 2 + channel_remap[dest], (long long)send);
 						stream.add_int(2 + channel_remap[dest], j, send, 32768);
 					}
 				}
@@ -505,6 +538,9 @@ void l7a1045_sound_device::sound_stream_update(sound_stream &stream)
 			vptr->frac = frac;
 		}
 	}
+#if L6028_CAPTURE_TRACE
+	m_capture_frame += stream.samples();
+#endif
 }
 
 void l7a1045_sound_device::voice_select_w(offs_t offset, uint16_t data, uint16_t mem_mask)
@@ -586,6 +622,7 @@ void l7a1045_sound_device::voiceregs_w(offs_t offset, uint16_t data)
 	m_regs[m_cur_register][m_cur_channel] |= (uint64_t(data) << (offset * 16));
 
 	LOGMASKED(LOG_REGISTERS, "ch %d reg %x: write %04x offset %d = %012llx\n", m_cur_channel, m_cur_register, data, offset, m_regs[m_cur_register][m_cur_channel]);
+	L6028_CAPTURE("L6028_TAP register frame=%llu voice=%u reg=%u word=%u data=%04x shadow=%012llx\n", (unsigned long long)m_capture_frame, unsigned(m_cur_channel), unsigned(m_cur_register), unsigned(offset), unsigned(data), (unsigned long long)m_regs[m_cur_register][m_cur_channel]);
 
 	switch (m_cur_register)
 	{
@@ -712,6 +749,7 @@ void l7a1045_sound_device::control_w(uint16_t data)
 	LOGMASKED(LOG_REGISTERS, "%s: %04x to control (ch %d)\n", tag(), data, m_cur_channel);
 
 	m_control = data;
+	L6028_CAPTURE("L6028_TAP control frame=%llu voice=%u data=%04x\n", (unsigned long long)m_capture_frame, unsigned(m_cur_channel), unsigned(data));
 
 	if (BIT(data, CONTROL_KEY_ON))
 	{
@@ -724,6 +762,7 @@ void l7a1045_sound_device::control_w(uint16_t data)
 		vptr->l = vptr->b = 0;
 		vptr->env_pos = 0;
 		m_key |= 1 << m_cur_channel;
+		L6028_CAPTURE("L6028_TAP key_on frame=%llu voice=%u start=%08x end=%08x step=%04x\n", (unsigned long long)m_capture_frame, unsigned(m_cur_channel), vptr->start, vptr->end, vptr->step);
 
 		recalc_loop_start(vptr);
 
