@@ -76,7 +76,7 @@ private:
 	memory_passthrough_handler m_io_write_tap;
 	memory_passthrough_handler m_io_read_tap;
 	u64 m_bus_sequence = 0;
-	bool m_descriptor_recorded = false;
+	u32 m_descriptor_count = 0;
 	int m_fdc_selected = 0, m_fdc_irq = 0, m_fdc_drq = 0, m_ata_irq = 0, m_ata_drq = 0;
 
 	void recalc_storage();
@@ -170,7 +170,7 @@ void mpc2000xldiag_state::machine_start()
 			u32 const off = pc & 0x7ffff;
 			bool const target = ((off >= 0x4127a) && (off <= 0x41280)) ||
 				((off >= 0x4187a) && (off <= 0x41880));
-			if (!m_descriptor_recorded && target && offset == 0x80 && (mem_mask & 0xff))
+			if (m_descriptor_count < 4096 && target && offset == 0x80 && (mem_mask & 0xff))
 			{
 				u32 const physical_candidate = (u32(es) << 4) + bx;
 				address_space &mem = m_cpu->space(AS_PROGRAM);
@@ -180,7 +180,7 @@ void mpc2000xldiag_state::machine_start()
 				for (u32 i = 0; i < 48; i++)
 					logerror("%02x", unsigned(mem.read_byte(physical_candidate + i)));
 				logerror("\n");
-				m_descriptor_recorded = true;
+				++m_descriptor_count;
 			}
 		}, &m_io_write_tap);
 	m_io_read_tap = io.install_read_tap(0x0080, 0x008f, "mpcxl_dsp_host_r",

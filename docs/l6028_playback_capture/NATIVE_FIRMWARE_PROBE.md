@@ -37,3 +37,5 @@ The first run is strictly a **boot and I/O observational test**; headless execut
 - PC-to-image offset versus runtime location must be verified from the trap output before treating a 48-byte RAM dump as the note descriptor.
 - Audio, sample loading from a floppy, guest program creation, the OS 1.14 boot path and descriptor capture are **unverified** until live execution.
 - Input PCM is intentionally **not** a golden output. No input/output matching and no DSP equation modifications.
+
+The first descriptor encountered may be a boot initialization slot rather than an audible note. Retain **multiple** candidate snapshots, then associate them with a subsequent key-on and sample-memory evidence. Never mislabel a boot-initialization descriptor as the triggered sample's descriptor.
