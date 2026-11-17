@@ -11,6 +11,20 @@ from pathlib import Path
 
 MARKER = "L6028_TAP "
 
+def load_events(path: Path) -> list[tuple[str, dict[str, str]]]:
+    """Load a *small* deterministic fixture as (kind, properties) for tests."""
+    events: list[tuple[str, dict[str, str]]] = []
+    with path.open("r", encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            ix = line.find(MARKER)
+            if ix < 0:
+                continue
+            tokens = line[ix + len(MARKER):].split()
+            if not tokens:
+                continue
+            events.append((tokens[0], dict(s.split("=", 1) for s in tokens[1:] if "=" in s)))
+    return events
+
 def summarize(path: Path) -> None:
     kinds: Counter[str] = Counter()
     voices: Counter[str] = Counter()

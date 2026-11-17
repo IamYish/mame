@@ -92,6 +92,7 @@ private:
 	uint32_t        m_key;
 	uint16_t        m_control;
 #if L6028_CAPTURE_TRACE
+	uint64_t        m_capture_seq = 0;
 	uint64_t        m_capture_frame = 0;
 	uint64_t        m_capture_read_frame = 0;
 	uint8_t         m_capture_voice = 0;

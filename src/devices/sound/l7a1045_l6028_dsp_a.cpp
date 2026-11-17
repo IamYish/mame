@@ -155,6 +155,7 @@
 #endif
 
 #include <array>
+#include <bit>
 #include <cmath>
 #include <numbers>
 
@@ -310,6 +311,7 @@ void l7a1045_sound_device::device_start()
 	save_item(NAME(m_cur_register));
 	save_item(NAME(m_regs));
 #if L6028_CAPTURE_TRACE
+	save_item(NAME(m_capture_seq));
 	save_item(NAME(m_capture_frame));
 	save_item(NAME(m_capture_read_frame));
 	save_item(NAME(m_capture_voice));
@@ -320,6 +322,7 @@ void l7a1045_sound_device::device_reset()
 {
 	m_key = 0;
 #if L6028_CAPTURE_TRACE
+	m_capture_seq = 0;
 	m_capture_frame = 0;
 	m_capture_read_frame = 0;
 	m_capture_voice = 0;
@@ -539,6 +542,16 @@ void l7a1045_sound_device::sound_stream_update(sound_stream &stream)
 		}
 	}
 #if L6028_CAPTURE_TRACE
+	// Exact bit patterns of MAME's post-voice-mix 32-bit float stream.
+	// This is NOT a claim that original L6028 silicon accumulated in float.
+	for (int j = 0; j < stream.samples(); ++j)
+	{
+		for (int ch = 0; ch < 10; ++ch)
+		{
+			const uint32_t sample_bits = std::bit_cast<uint32_t>(stream.get_output(ch, j));
+			L6028_CAPTURE("L6028_TAP mix_output frame=%llu channel=%d f32bits=%08x\n", (unsigned long long)(trace_base + j), ch, sample_bits);
+		}
+	}
 	m_capture_frame += stream.samples();
 #endif
 }
@@ -550,6 +563,11 @@ void l7a1045_sound_device::voice_select_w(offs_t offset, uint16_t data, uint16_t
 	// c = channel
 
 	m_stream->update();
+#if L6028_CAPTURE_TRACE
+	L6028_CAPTURE("L6028_TAP select seq=%llu tick=%lld frame=%llu offset=%u data=%04x mask=%04x\n",
+		(unsigned long long)m_capture_seq++, (long long)machine().time().as_ticks(clock()),
+		(unsigned long long)m_capture_frame, unsigned(offset), unsigned(data), unsigned(mem_mask));
+#endif
 
 	if (ACCESSING_BITS_0_7)
 	{
@@ -622,7 +640,10 @@ void l7a1045_sound_device::voiceregs_w(offs_t offset, uint16_t data)
 	m_regs[m_cur_register][m_cur_channel] |= (uint64_t(data) << (offset * 16));
 
 	LOGMASKED(LOG_REGISTERS, "ch %d reg %x: write %04x offset %d = %012llx\n", m_cur_channel, m_cur_register, data, offset, m_regs[m_cur_register][m_cur_channel]);
-	L6028_CAPTURE("L6028_TAP register frame=%llu voice=%u reg=%u word=%u data=%04x shadow=%012llx\n", (unsigned long long)m_capture_frame, unsigned(m_cur_channel), unsigned(m_cur_register), unsigned(offset), unsigned(data), (unsigned long long)m_regs[m_cur_register][m_cur_channel]);
+	L6028_CAPTURE("L6028_TAP register seq=%llu tick=%lld frame=%llu voice=%u reg=%u word=%u data=%04x shadow=%012llx\n",
+		(unsigned long long)m_capture_seq++, (long long)machine().time().as_ticks(clock()),
+		(unsigned long long)m_capture_frame, unsigned(m_cur_channel), unsigned(m_cur_register),
+		unsigned(offset), unsigned(data), (unsigned long long)m_regs[m_cur_register][m_cur_channel]);
 
 	switch (m_cur_register)
 	{
@@ -749,7 +770,9 @@ void l7a1045_sound_device::control_w(uint16_t data)
 	LOGMASKED(LOG_REGISTERS, "%s: %04x to control (ch %d)\n", tag(), data, m_cur_channel);
 
 	m_control = data;
-	L6028_CAPTURE("L6028_TAP control frame=%llu voice=%u data=%04x\n", (unsigned long long)m_capture_frame, unsigned(m_cur_channel), unsigned(data));
+	L6028_CAPTURE("L6028_TAP control seq=%llu tick=%lld frame=%llu voice=%u data=%04x\n",
+		(unsigned long long)m_capture_seq++, (long long)machine().time().as_ticks(clock()),
+		(unsigned long long)m_capture_frame, unsigned(m_cur_channel), unsigned(data));
 
 	if (BIT(data, CONTROL_KEY_ON))
 	{
@@ -786,6 +809,9 @@ void l7a1045_sound_device::control_w(uint16_t data)
 
 void l7a1045_sound_device::atomic_w(uint16_t data)
 {
+	L6028_CAPTURE("L6028_TAP atomic seq=%llu tick=%lld frame=%llu voice=%u reg=%u data=%04x\n",
+		(unsigned long long)m_capture_seq++, (long long)machine().time().as_ticks(clock()),
+		(unsigned long long)m_capture_frame, unsigned(m_cur_channel), unsigned(m_cur_register), unsigned(data));
 	LOGMASKED(LOG_REGISTERS, "%s atomic write %04x to reg %x\n", tag(), data, m_cur_register);
 	m_regs[m_cur_register][m_cur_channel] = 0;
 }
@@ -796,22 +822,34 @@ uint16_t l7a1045_sound_device::dma_r16_cb()
 
 	m_drq_handler(CLEAR_LINE);
 
+	L6028_CAPTURE("L6028_TAP dma_read seq=%llu tick=%lld frame=%llu byte_address=%08x sample_type=%u\n",
+		(unsigned long long)m_capture_seq++, (long long)machine().time().as_ticks(clock()),
+		(unsigned long long)m_capture_frame, unsigned(byteoffs), unsigned(m_voice[0].sample_type));
 	m_voice[0].pos++;
 	// DMA shares voice 0's cursor, but obviously is not interpolated
 	m_voice[0].history_count = 0;
 	if (m_voice[0].sample_type == 1)
 	{
 		LOGMASKED(LOG_DMA, "%s DMA read ROM @ %08x\n", tag(), byteoffs);
-		return m_rom_cache.read_word(byteoffs);
+		const uint16_t data = m_rom_cache.read_word(byteoffs);
+		L6028_CAPTURE("L6028_TAP dma_read_value tick=%lld frame=%llu byte_address=%08x data=%04x\n",
+			(long long)machine().time().as_ticks(clock()), (unsigned long long)m_capture_frame, unsigned(byteoffs), unsigned(data));
+		return data;
 	}
 
 	LOGMASKED(LOG_DMA, "%s DMA read RAM @ %08x\n", tag(), byteoffs);
-	return m_cache.read_word(byteoffs);
+	const uint16_t data = m_cache.read_word(byteoffs);
+	L6028_CAPTURE("L6028_TAP dma_read_value tick=%lld frame=%llu byte_address=%08x data=%04x\n",
+		(long long)machine().time().as_ticks(clock()), (unsigned long long)m_capture_frame, unsigned(byteoffs), unsigned(data));
+	return data;
 }
 
 void l7a1045_sound_device::dma_w16_cb(uint16_t data)
 {
 	const offs_t byteoffs = (m_voice[0].start << 1) + (m_voice[0].pos << 1);
+	L6028_CAPTURE("L6028_TAP dma_write seq=%llu tick=%lld frame=%llu byte_address=%08x sample_type=%u data=%04x\n",
+		(unsigned long long)m_capture_seq++, (long long)machine().time().as_ticks(clock()),
+		(unsigned long long)m_capture_frame, unsigned(byteoffs), unsigned(m_voice[0].sample_type), unsigned(data));
 
 	m_drq_handler(CLEAR_LINE);
 
@@ -832,5 +870,8 @@ void l7a1045_sound_device::dma_w16_cb(uint16_t data)
 
 TIMER_CALLBACK_MEMBER(l7a1045_sound_device::dma_timer_callback)
 {
+	L6028_CAPTURE("L6028_TAP dma_request seq=%llu tick=%lld frame=%llu\n",
+		(unsigned long long)m_capture_seq++, (long long)machine().time().as_ticks(clock()),
+		(unsigned long long)m_capture_frame);
 	m_drq_handler(ASSERT_LINE);
 }
