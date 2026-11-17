@@ -46,6 +46,9 @@ private:
 	bool load_private_pack();
 	void stop_voice(u8 voice);
 	void probe_atomic_envelope();
+	// Ordered host-port transactions: never change chip playback arithmetic.
+	enum class host_op : u8 { select, w0, w1, w2, atomic, control, keyon_rmw };
+	void emit_host(host_op op, u16 data = 0);
 	void start_voice(u8 voice, u32 first_sample, u32 length);
 	TIMER_CALLBACK_MEMBER(test_step);
 	void dma_request(int state);
@@ -139,6 +142,29 @@ void l6028lab_state::probe_atomic_envelope()
 		fatalerror("L6028 model atomic envelope semantics changed: inspect source");
 }
 
+void l6028lab_state::emit_host(host_op op, u16 data)
+{
+	// These calls merely preserve exact host MMIO order. Interpretation of
+	// commands and every sound consequence stays inside the MAME L6028.
+	switch (op)
+	{
+	case host_op::select:  m_dsp->lab_host_w(0x00, data); break;
+	case host_op::w0:      m_dsp->lab_host_w(0x02, data); break;
+	case host_op::w1:      m_dsp->lab_host_w(0x04, data); break;
+	case host_op::w2:      m_dsp->lab_host_w(0x06, data); break;
+	case host_op::atomic:  m_dsp->lab_host_w(0x0c, data); break;
+	case host_op::control: m_dsp->lab_host_w(0x08, data); break;
+	case host_op::keyon_rmw:
+	{
+		// Firmware report: read 0x88, clear bit 7, set bit 8, write back.
+		// Do not use in the legacy test before concrete descriptor/status proof.
+		u16 const prior = m_dsp->lab_host_r(0x08);
+		m_dsp->lab_host_w(0x08, (prior & 0xff7f) | 0x0100);
+		break;
+	}
+	}
+}
+
 void l6028lab_state::stop_voice(u8 voice)
 {
 	m_dsp->lab_host_w(0x00, (3 << 8) | voice);
@@ -161,12 +187,14 @@ void l6028lab_state::start_voice(u8 voice, u32 first_sample, u32 length)
 	};
 	for (u16 r = 0; r < 8; r++)
 	{
-		m_dsp->lab_host_w(0x00, (r << 8) | voice);
-		for (u16 word = 0; word < 3; word++)
-			m_dsp->lab_host_w(0x02 + 2 * word, (reg[r] >> (16 * word)) & 0xffff);
+		// Legacy test-stimulus order W0->W1->W2 (not a firmware claim).
+		emit_host(host_op::select, (r << 8) | voice);
+		emit_host(host_op::w0, (reg[r] >> 0) & 0xffff);
+		emit_host(host_op::w1, (reg[r] >> 16) & 0xffff);
+		emit_host(host_op::w2, (reg[r] >> 32) & 0xffff);
 	}
-	m_dsp->lab_host_w(0x00, voice);
-	m_dsp->lab_host_w(0x08, 0x0100); // key-on, with DMA disabled
+	emit_host(host_op::select, voice);
+	emit_host(host_op::control, 0x0100); // preserve legacy test-only key-on
 }
 
 TIMER_CALLBACK_MEMBER(l6028lab_state::test_step)

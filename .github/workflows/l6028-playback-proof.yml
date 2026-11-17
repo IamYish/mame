@@ -74,6 +74,10 @@ jobs:
           python3 scripts/l6028_tap_summary.py l6028-proof/error.log > l6028-proof/summary.txt
           python3 scripts/l6028_trace_to_wav.py l6028-proof/error.log --channels stereo --output l6028-proof/main-f32.wav
           python3 scripts/l6028_trace_to_wav.py l6028-proof/error.log --channels all --output l6028-proof/all10-f32.wav
+          # Golden is a previously verified L6028 OUTPUT; never compare to input PCM.
+          echo 'eff76df009ae768f731641e4d37d8961b70d84d49472d7b13f7f576285f43d6f  l6028-proof/main-f32.wav' > l6028-proof/golden-output-sha256.txt
+          echo '078a02bc94306b0bf4cb1f667e382a0e76ad7909fcf1fef08e685434e7f24ae3  l6028-proof/all10-f32.wav' >> l6028-proof/golden-output-sha256.txt
+          sha256sum -c l6028-proof/golden-output-sha256.txt
       - name: MAME native speaker WAV with trace compiled ON
         env:
           SDL_AUDIODRIVER: dummy
