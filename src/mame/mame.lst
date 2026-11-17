@@ -585,6 +585,9 @@ mpc60scsi
 @source:akai/mpc2000.cpp
 mpc2000xl
 
+@source:akai/l6028lab.cpp
+l6028lab
+
 @source:akai/mpc3000.cpp
 mpc3000
 

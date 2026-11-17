@@ -36,6 +36,8 @@ public:
 	l7a1045_sound_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);
 
 	void map(address_map &map);
+	// Test-stand host MMIO adapter: only calls the original handlers above.
+	void lab_host_w(u16 byte_offset, u16 data);
 
 	auto drq_handler_cb() { return m_drq_handler.bind(); }
 

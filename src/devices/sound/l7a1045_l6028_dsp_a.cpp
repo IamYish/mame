@@ -262,6 +262,21 @@ void l7a1045_sound_device::map(address_map &map)
 	map(0x000c, 0x000d).w(FUNC(l7a1045_sound_device::atomic_w));
 }
 
+void l7a1045_sound_device::lab_host_w(u16 byte_offset, u16 data)
+{
+	// ROM-free test bus: the original host MMIO command handlers are retained.
+	switch (byte_offset)
+	{
+	case 0x00: voice_select_w(0, data); break;
+	case 0x02: voiceregs_w(0, data); break;
+	case 0x04: voiceregs_w(1, data); break;
+	case 0x06: voiceregs_w(2, data); break;
+	case 0x08: control_w(data); break;
+	case 0x0c: atomic_w(data); break;
+	default: fatalerror("L6028 lab unsupported MMIO offset %04x", byte_offset);
+	}
+}
+
 device_memory_interface::space_config_vector l7a1045_sound_device::memory_space_config() const
 {
 	return space_config_vector
