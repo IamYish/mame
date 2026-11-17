@@ -81,3 +81,7 @@ py scripts/l6028_trace_to_wav.py error.log --output l6028-all10-f32.wav --channe
 ```
 
 The WAV exporter is strict: each output frame must contain all ten channels, exactly once, with no missing frames. A failed or incomplete trace is **not** turned into invented silence. Exported WAV uses WAVE_FORMAT_IEEE_FLOAT and exact 32-bit patterns from `mix_output`. This is a diagnostic representation of MAME's mix buffer, *not a verified hardware DAC stream*. These commands do **not** produce sound until an actual MAME chip run or fixture has produced trace records.
+
+## Supplied MPC2000XL firmware
+
+Two user-supplied MPC2000XL OS revisions have been matched byte-for-byte against MAME's existing 1.14 and 1.20 ROM checksums. See [the private-firmware audit and local staging guide](FIRMWARE.md). Firmware bytes are deliberately **not** committed; the required 32 KiB panel-controller ROM remains missing. The currently defined MAME machine is **MPC2000XL**, not a verified original MPC2000.
