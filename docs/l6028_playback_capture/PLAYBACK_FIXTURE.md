@@ -83,3 +83,7 @@ Evidence from the archived trace: 2,269 rendered PCM frames (0 through 2268), 22
 ### Next gate: repeated-execution determinism
 
 The focused workflow now runs the same machine twice using the same compiled binary and verifies that the stereo and all-ten-channel extracted WAV files are byte-for-byte identical (using `cmp`). It saves SHA-256 checksums and the second run's trace. This proves deterministic repeated execution under the exact diagnostic build if green; it **does not yet compare against the tracing-disabled binary**.
+
+## Capture-instrumentation noninterference test
+
+After the successful bit-identical **two-run** test at GitHub Actions run `44096662386`, the workflow adds a separate build with the L6028 diagnostic capture macro **absent**. It uses an independent build subtarget to avoid accidentally reusing a trace-enabled object. Both builds exercise the identical two-voice test and record MAME's own host PCM16 through the dummy SDL audio backend at 44.1 kHz. A third job rejects nonidentical WAV files byte-for-byte, as well as an all-silent recording. This is **a post-speaker/output signal test**, not an exact all-ten-channel pre-speaker floating-point comparison. No playback DSP formulas have been changed.

@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   pcm-proof:
@@ -62,6 +63,13 @@ jobs:
           python3 scripts/l6028_tap_summary.py l6028-proof/error.log > l6028-proof/summary.txt
           python3 scripts/l6028_trace_to_wav.py l6028-proof/error.log --channels stereo --output l6028-proof/main-f32.wav
           python3 scripts/l6028_trace_to_wav.py l6028-proof/error.log --channels all --output l6028-proof/all10-f32.wav
+      - name: MAME native speaker WAV with trace compiled ON
+        env:
+          SDL_AUDIODRIVER: dummy
+          SDL_VIDEODRIVER: dummy
+        run: |
+          ./l6028lab l6028lab -log -seconds_to_run 1 -nothrottle -video none -sound sdl -samplerate 44100 -wavwrite l6028-proof/host-on.wav > l6028-proof/host-on-console.log 2>&1
+          python3 -c 'import wave; w=wave.open("l6028-proof/host-on.wav", "rb"); assert w.getframerate()==44100 and w.getnframes()>100 and w.getsampwidth()==2; assert any(w.readframes(w.getnframes()))'
       - name: Repeat identical machine execution and demand bit-identical PCM
         env:
           SDL_AUDIODRIVER: dummy
@@ -84,3 +92,67 @@ jobs:
             l6028-proof/
           if-no-files-found: warn
           retention-days: 14
+
+  pcm-trace-off:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout pinned source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Install MAME dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libasound2-dev libxinerama-dev libxi-dev qt6-base-dev qt6-base-dev-tools
+      - name: Build L6028 without tracing compiled in
+        run: |
+          make -j3 SOURCES=src/mame/akai/l6028lab.cpp SUBTARGET=l6028off REGENIE=1
+      - name: Run the same 2-voice test and capture native MAME audio
+        env:
+          SDL_AUDIODRIVER: dummy
+          SDL_VIDEODRIVER: dummy
+        run: |
+          mkdir -p l6028-off
+          set +e
+          ./l6028off l6028lab -log -seconds_to_run 1 -nothrottle -video none -sound sdl -samplerate 44100 -wavwrite l6028-off/host-off.wav > l6028-off/console.log 2>&1
+          status=$?
+          set -e
+          if test -f error.log; then cp error.log l6028-off/error.log; fi
+          exit "$status"
+      - name: Assert trace code is absent and host audio is nonzero
+        run: |
+          python3 scripts/l6028_fixture_check.py l6028-off/error.log
+          if grep -q 'L6028_TAP ' l6028-off/error.log; then echo 'Unexpected trace output'; exit 1; fi
+          python3 -c 'import wave; w=wave.open("l6028-off/host-off.wav", "rb"); assert w.getframerate()==44100 and w.getnframes()>100 and w.getsampwidth()==2; assert any(w.readframes(w.getnframes()))'
+      - name: Upload trace-off audio evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: l6028-trace-off-${{ github.run_number }}
+          path: l6028-off/
+          if-no-files-found: warn
+          retention-days: 14
+
+  pcm-differential:
+    name: Compare trace ON vs OFF native MAME PCM
+    needs: [pcm-proof, pcm-trace-off]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download trace-on recording
+        uses: actions/download-artifact@v4
+        with:
+          name: l6028-pcm-proof-${{ github.run_number }}
+          path: on
+      - name: Download trace-off recording
+        uses: actions/download-artifact@v4
+        with:
+          name: l6028-trace-off-${{ github.run_number }}
+          path: off
+      - name: Verify identical speaker WAV bytes
+        run: |
+          test -s on/host-on.wav
+          test -s off/host-off.wav
+          cmp on/host-on.wav off/host-off.wav
+          sha256sum on/host-on.wav off/host-off.wav
+          echo "PASS: MAME host PCM16 identical with L6028 tracing compiled on/off."
