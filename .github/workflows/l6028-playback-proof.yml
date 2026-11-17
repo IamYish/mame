@@ -46,6 +46,16 @@ jobs:
           # MAME's source-filtered subtarget is linked as "l6028lab", not "mamel6028lab".
           test -x ./l6028lab
           ./l6028lab -listfull l6028lab
+      - name: Test isolated atomic reg3 behavior, no audio or DSP changes
+        env:
+          SDL_AUDIODRIVER: dummy
+          SDL_VIDEODRIVER: dummy
+          L6028_ATOMIC_PROBE: '1'
+        run: |
+          mkdir -p l6028-proof
+          ./l6028lab l6028lab -log -seconds_to_run 1 -nothrottle -video none -sound none > l6028-proof/atomic-console.log 2>&1
+          cp error.log l6028-proof/atomic-error.log
+          grep -q 'L6028_ATOMIC_PROBE_RESULT before=2000 after_atomic=2000 after_regular=0000' l6028-proof/atomic-error.log
       - name: Render 2-voice fixture using L6028 model
         env:
           SDL_AUDIODRIVER: dummy

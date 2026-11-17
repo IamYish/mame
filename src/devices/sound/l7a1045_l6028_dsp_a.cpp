@@ -277,6 +277,20 @@ void l7a1045_sound_device::lab_host_w(u16 byte_offset, u16 data)
 	}
 }
 
+u16 l7a1045_sound_device::lab_host_r(u16 byte_offset)
+{
+	// Diagnostic host read through original register/readback logic.
+	switch (byte_offset)
+	{
+	case 0x02: return voiceregs_r(0);
+	case 0x04: return voiceregs_r(1);
+	case 0x06: return voiceregs_r(2);
+	case 0x08: return control_r();
+	default: fatalerror("L6028 lab unsupported read offset %04x", byte_offset);
+	}
+	return 0;
+}
+
 device_memory_interface::space_config_vector l7a1045_sound_device::memory_space_config() const
 {
 	return space_config_vector

@@ -38,6 +38,8 @@ public:
 	void map(address_map &map);
 	// Test-stand host MMIO adapter: only calls the original handlers above.
 	void lab_host_w(u16 byte_offset, u16 data);
+	// Diagnostic bus read adapter, delegates to the existing device handlers.
+	u16 lab_host_r(u16 byte_offset);
 
 	auto drq_handler_cb() { return m_drq_handler.bind(); }
 

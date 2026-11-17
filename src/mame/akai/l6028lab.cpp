@@ -45,6 +45,7 @@ private:
 	void load_samples();
 	bool load_private_pack();
 	void stop_voice(u8 voice);
+	void probe_atomic_envelope();
 	void start_voice(u8 voice, u32 first_sample, u32 length);
 	TIMER_CALLBACK_MEMBER(test_step);
 	void dma_request(int state);
@@ -119,6 +120,25 @@ bool l6028lab_state::load_private_pack()
 	return true;
 }
 
+void l6028lab_state::probe_atomic_envelope()
+{
+	// 0x2000 is arbitrary probe data, NOT a recovered firmware default.
+	constexpr u16 probe_value = 0x2000;
+	logerror("L6028_ATOMIC_PROBE_BEGIN voice=0 reg=3 value=%04x\n", probe_value);
+	m_dsp->lab_host_w(0x00, 0x0300);
+	m_dsp->lab_host_w(0x04, probe_value);
+	u16 const before = m_dsp->lab_host_r(0x04);
+	m_dsp->lab_host_w(0x0c, 0);
+	u16 const after_atomic = m_dsp->lab_host_r(0x04);
+	m_dsp->lab_host_w(0x04, 0);
+	u16 const after_regular = m_dsp->lab_host_r(0x04);
+	logerror("L6028_ATOMIC_PROBE_RESULT before=%04x after_atomic=%04x after_regular=%04x\n",
+		before, after_atomic, after_regular);
+	// Assert CURRENT MAME semantics only. Do not infer behavior of real silicon.
+	if (before != probe_value || after_atomic != probe_value || after_regular != 0)
+		fatalerror("L6028 model atomic envelope semantics changed: inspect source");
+}
+
 void l6028lab_state::stop_voice(u8 voice)
 {
 	m_dsp->lab_host_w(0x00, (3 << 8) | voice);
@@ -154,6 +174,12 @@ TIMER_CALLBACK_MEMBER(l6028lab_state::test_step)
 	switch (param)
 	{
 	case 0:
+		if (std::getenv("L6028_ATOMIC_PROBE"))
+		{
+			probe_atomic_envelope();
+			machine().schedule_exit();
+			break;
+		}
 		if (load_private_pack())
 		{
 			for (u32 v = 0; v < 8; ++v)
