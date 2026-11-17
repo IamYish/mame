@@ -40,3 +40,15 @@ For optional diagnostic ten-channel PCM tracing, enable `L6028_CAPTURE_TRACE=1` 
 5. Eventually use the user's full 16-sample kit for presentation listening.
 
 **Current status**: source committed, build/audio not yet independently verified. MAME's interpolation and filter arithmetic are a reconstruction; the chip's true internal precision has not been established. The original Akai firmware is not used.
+
+## Automated log acceptance
+
+After running the MAME fixture, validate the test milestones:
+
+```powershell
+py scripts/test_l6028_fixture_check.py
+py scripts/l6028_fixture_check.py error.log
+py scripts/l6028_fixture_check.py error.log --require-trace
+```
+
+The final command requires a capture-enabled DSP build, verifies both key-on events are separated by 220 internal audio frames, checks ten complete output channels and rejects all-silent main PCM. These scripts have **not** executed the MAME machine or established a bit-exact hardware result. The diagnostic MAME machine is registered without MAME's `MACHINE_NOT_WORKING` warning screen to allow headless validation; research limitations still apply.

@@ -140,4 +140,4 @@ ROM_END
 
 CONS(2026, l6028lab, 0, 0, l6028lab, l6028lab, l6028lab_state, empty_init,
 	"StaticPoint Audio / MAME research", "L6028 PCM Playback Lab (diagnostic)",
-	MACHINE_NOT_WORKING | MACHINE_IMPERFECT_SOUND)
+	0)
