@@ -6,12 +6,17 @@ import struct
 import tempfile
 import wave
 import zipfile
+import argparse
+import shutil
 from pathlib import Path
 file=Path(__file__).with_name("l6028_pack_wavs.py")
 spec=importlib.util.spec_from_file_location("l6028_pack_wavs", file)
 assert spec and spec.loader
 packer=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(packer)
+parser=argparse.ArgumentParser()
+parser.add_argument("--emit-pack",type=Path)
+args=parser.parse_args()
 with tempfile.TemporaryDirectory() as d:
     base=Path(d)
     src=base/"input.zip"
@@ -31,4 +36,7 @@ with tempfile.TemporaryDirectory() as d:
     assert all(struct.unpack_from("<II",data,16+8*i)==(32,48) for i in range(8))
     assert len(data)==80+8*48*2
     assert result["samples"][7]["start_word"]==0x39000
+    if args.emit_pack:
+        args.emit_pack.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(dst,args.emit_pack)
 print("L6028 sample packer synthetic test: PASS")
