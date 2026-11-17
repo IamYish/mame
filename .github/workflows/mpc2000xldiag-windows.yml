@@ -73,7 +73,7 @@ jobs:
           $drivers = @($systems -split '\r?\n' | Where-Object { $_ -match '^\w+\s+"' })
           if ($drivers.Count -ne 1 -or $drivers[0] -notmatch '^mpc2000xldiag\s') { throw 'Unexpected driver list' }
           $devices = Invoke-Probe 'devices' 'mpc2000xldiag -listmedia'
-          if ($devices -notmatch 'quickload' -or $devices -notmatch 'flop1') { throw 'Missing firmware or floppy device' }
+          if ($devices -notmatch 'quickload' -or $devices -notmatch '\(flop1?\)') { throw 'Missing firmware or floppy device' }
           $null = Invoke-Probe 'rom-free-smoke' 'mpc2000xldiag -noreadconfig -video none -sound none -seconds_to_run 2 -nothrottle'
           Get-ChildItem $stage -File | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object {
             $hash = Get-FileHash $_.FullName -Algorithm SHA256
