@@ -39,3 +39,26 @@ The first run is strictly a **boot and I/O observational test**; headless execut
 - Input PCM is intentionally **not** a golden output. No input/output matching and no DSP equation modifications.
 
 The first descriptor encountered may be a boot initialization slot rather than an audible note. Retain **multiple** candidate snapshots, then associate them with a subsequent key-on and sample-memory evidence. Never mislabel a boot-initialization descriptor as the triggered sample's descriptor.
+
+## Attempt one real sample and pad event in a LOCAL interactive session
+
+The companion private FAT12 floppy image `MPC2000XL_KICK_FAT12.img` contains `KICK.WAV` from the user's original sample pack, with its WAV bytes preserved. This image is NOT a repository artifact, and guest compatibility remains unverified.
+
+For an interactive Linux MAME build, invoke:
+
+```bash
+MPCXL_HOST_CAPTURE=1 ./mpc2000xldiag mpc2000xldiag \
+  -quickload /private/mpcxl/MPC2KXL.BIN \
+  -flop1 /private/mpcxl/MPC2000XL_KICK_FAT12.img \
+  -log -window -sound none
+```
+
+The guest must first boot successfully, then **guest firmware** must load the floppy WAV, create/assign an actual note/program, and receive a pad press via the modeled serial panel input. This has not yet been demonstrated on this imported driver. A test with no guest sample/program loaded is not sufficient for the objective.
+
+After exiting MAME, inspect the private `error.log` using:
+
+```bash
+python3 scripts/mpc2000xl_host_trace.py error.log --out private/mpc2000xl-host.jsonl --require-host-writes
+```
+
+Do not mark success until `MPCXL_DESCRIPTOR_CANDIDATE` corresponds to the note-init routine and the generated port tape contains the original firmware's key-on. To confirm an **audible** note, additionally establish valid sample-memory contents and a nonzero chip sample/output event; a register write alone does not prove a sample was produced. Keep all private logs outside Git.
