@@ -62,6 +62,19 @@ jobs:
           python3 scripts/l6028_tap_summary.py l6028-proof/error.log > l6028-proof/summary.txt
           python3 scripts/l6028_trace_to_wav.py l6028-proof/error.log --channels stereo --output l6028-proof/main-f32.wav
           python3 scripts/l6028_trace_to_wav.py l6028-proof/error.log --channels all --output l6028-proof/all10-f32.wav
+      - name: Repeat identical machine execution and demand bit-identical PCM
+        env:
+          SDL_AUDIODRIVER: dummy
+          SDL_VIDEODRIVER: dummy
+        run: |
+          ./l6028lab l6028lab -log -seconds_to_run 1 -nothrottle -video none -sound none > l6028-proof/repeat-console.log 2>&1
+          cp error.log l6028-proof/repeat-error.log
+          python3 scripts/l6028_fixture_check.py l6028-proof/repeat-error.log --require-trace
+          python3 scripts/l6028_trace_to_wav.py l6028-proof/repeat-error.log --channels stereo --output l6028-proof/repeat-main-f32.wav
+          python3 scripts/l6028_trace_to_wav.py l6028-proof/repeat-error.log --channels all --output l6028-proof/repeat-all10-f32.wav
+          cmp l6028-proof/main-f32.wav l6028-proof/repeat-main-f32.wav
+          cmp l6028-proof/all10-f32.wav l6028-proof/repeat-all10-f32.wav
+          sha256sum l6028-proof/main-f32.wav l6028-proof/repeat-main-f32.wav l6028-proof/all10-f32.wav l6028-proof/repeat-all10-f32.wav > l6028-proof/bitwise-repeat-sha256.txt
       - name: Upload diagnostic evidence whether green or red
         if: always()
         uses: actions/upload-artifact@v4

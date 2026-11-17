@@ -73,3 +73,13 @@ The follow-up job (GitHub Actions run `44086925666`, commit `93cb8289`) successf
 ## Native build outcome 3 — runtime argument corrected
 
 In Actions run `44089441552` at commit `78ef357e`, the lab's C++ code compiled, linked and passed `./l6028lab -listfull l6028lab`. The subsequent run ended with exit code 3 and its retained `console.log` contained only `Error: unknown option: 0`. This came from using the unsupported `-throttle 0` command syntax. The next run uses MAME's supported `-nothrottle` switch. The machine had **not started processing PCM** in the failed run.
+
+## Executed PCM milestone — run 4 (PASS)
+
+GitHub Actions [run 44091818481](https://github.com/IamYish/mame/actions/runs/44091818481) at commit `c4c3a4d7` **compiled and executed the real L6028 device**, completing the entire test. The actual artifact contains `error.log`, `summary.txt`, 44.1-kHz IEEE float32 stereo (`main-f32.wav`) and ten-channel (`all10-f32.wav`) recordings. **No proprietary Akai ROM was needed.**
+
+Evidence from the archived trace: 2,269 rendered PCM frames (0 through 2268), 22,690 channel samples, 4,316 sample read/interpolation/filter/voice-output records, exactly 2 key-on events at frames **1** and **221**, and nonzero output from both voices (voice 0: 2,268/2,268 frames; voice 1: 2,048/2,048 frames). Both main channels are identical in this centered test. The eight auxiliary outputs are silent as programmed. The 51-millisecond test fixture establishes an execution and digital-output reference, **not original-silicon bit accuracy or the desired sonic presentation**.
+
+### Next gate: repeated-execution determinism
+
+The focused workflow now runs the same machine twice using the same compiled binary and verifies that the stereo and all-ten-channel extracted WAV files are byte-for-byte identical (using `cmp`). It saves SHA-256 checksums and the second run's trace. This proves deterministic repeated execution under the exact diagnostic build if green; it **does not yet compare against the tracing-disabled binary**.
