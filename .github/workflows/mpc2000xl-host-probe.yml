@@ -1,0 +1,41 @@
+name: MPC2000XL native OS host capture probe (no firmware in CI)
+on:
+  push:
+    branches:
+      - lab/l6028-capture
+    paths:
+      - '.github/workflows/mpc2000xl-host-probe.yml'
+      - 'src/mame/akai/mpc2000xldiag.cpp'
+      - 'src/mame/mame.lst'
+      - 'src/devices/sound/l7a1045_l6028_dsp_a.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout source without proprietary ROM
+        uses: actions/checkout@v4
+      - name: Install MAME Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libasound2-dev libxinerama-dev libxi-dev qt6-base-dev qt6-base-dev-tools
+      - name: Build isolated full MPC2000XL V53 machine
+        run: |
+          make -j3 SOURCES=src/mame/akai/mpc2000xldiag.cpp SUBTARGET=mpc2000xldiag REGENIE=1
+      - name: Verify machine and quickload device
+        run: |
+          test -x ./mpc2000xldiag
+          ./mpc2000xldiag -listfull mpc2000xldiag
+          ./mpc2000xldiag -listdevices mpc2000xldiag > mpc2000xl-devices.txt
+          grep -i quickload mpc2000xl-devices.txt
+      - name: Upload ROM-free Linux probe executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpc2000xl-host-probe-linux
+          path: |
+            mpc2000xldiag
+            mpc2000xl-devices.txt
+          retention-days: 14
