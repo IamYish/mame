@@ -50376,3 +50376,6 @@ iq151
 
 @source:zvt/pp01.cpp
 pp01
+
+@source:akai/mpc2000xldiag.cpp
+mpc2000xldiag
