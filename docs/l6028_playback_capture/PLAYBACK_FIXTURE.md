@@ -60,3 +60,8 @@ The optional branch-scoped workflow [`l6028-playback-proof.yml`](../../../.githu
 The build uses `ARCHOPTS=-DL6028_CAPTURE_TRACE=1` to enable taps in the actual L6028 translation unit. It does **not** upload proprietary firmware or assert silicon identity. A green workflow is needed before claiming the rendered PCM path works. To compare trace-on versus trace-off, follow with the same build with no `ARCHOPTS` define and compare exact output bits; the workflow does not do that additional differential build yet.
 
 Check `Actions → L6028 ROM-free PCM playback proof` in GitHub. If no run is recorded, use the documented MSYS2 local build instead. This workflow has no background agent; it runs only through GitHub's own Actions service.
+
+## Native build outcome 1 — API compatibility correction
+
+The first GitHub Actions build failed when compiling the lab driver, before any sound was generated:
+`WRITE_LINE_MEMBER(dma_request)` is no longer a valid declaration in this pinned MAME revision. The callback is now a normal `void dma_request(int state)` member, matching other MAME driver callback implementations. The original L6028 playback arithmetic is unchanged. Re-run the focused workflow and inspect the next build error or PCM evidence; no success is claimed merely from correcting source.

@@ -30,7 +30,7 @@ private:
 	void load_samples();
 	void start_voice(u8 voice, u32 first_sample);
 	TIMER_CALLBACK_MEMBER(test_step);
-	WRITE_LINE_MEMBER(dma_request);
+	void dma_request(int state);
 };
 
 void l6028lab_state::pcm_map(address_map &map)
@@ -100,7 +100,7 @@ TIMER_CALLBACK_MEMBER(l6028lab_state::test_step)
 	}
 }
 
-WRITE_LINE_MEMBER(l6028lab_state::dma_request)
+void l6028lab_state::dma_request(int state)
 {
 	if (state)
 		logerror("L6028_LAB_UNEXPECTED_DMA_REQUEST\n");
