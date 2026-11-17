@@ -69,7 +69,7 @@ jobs:
             }
             return $output
           }
-          $systems = Invoke-Probe 'systems' '-listfull'
+          $systems = Invoke-Probe 'systems' 'mpc2000xldiag -listfull'
           $drivers = @($systems -split '\r?\n' | Where-Object { $_ -match '^\w+\s+"' })
           if ($drivers.Count -ne 1 -or $drivers[0] -notmatch '^mpc2000xldiag\s') { throw 'Unexpected driver list' }
           $devices = Invoke-Probe 'devices' 'mpc2000xldiag -listmedia'
