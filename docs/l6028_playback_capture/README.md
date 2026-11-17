@@ -1,6 +1,16 @@
 # L6028 playback-engine capture (reference-first)
 
-Status: **CPU→DSP input, DMA, per-voice, and ten-channel post-mix taps committed; not yet compiled or PCM-validated**. This is **not** a new sampler implementation. The complete original MAME source tree is preserved on the fork's `master`; this branch is an isolated capture lab.
+Status: **ROM-free two-voice L6028 playback compiled, executed and validated with nonzero 44.1 kHz PCM. Repeated renders matched byte for byte; short-fixture speaker-side trace-on/off recordings also matched for their captured interval. Eight real-sample pack mode requires separate native verification.** This is **not** a new sampler implementation. The complete original MAME source tree is preserved on the fork's `master`; this branch is an isolated capture lab.
+
+## Non-goal: input/output PCM equality (hard research rule)
+
+**Never attempt to make the L6028's rendered PCM match the input WAV's PCM by adjusting the machine.** The input is the stimulus; the output is the consequence of the existing chip model, including memory reads, interpolation, fixed-width arithmetic, envelope, filter, gain, routing, mixing, and register timing. A difference between input PCM and output PCM is an **observation**, not a failed test.
+
+- Preserve the reconstructed L6028 computation and machine behavior. Do **not** introduce compensating gain, EQ, normalization, resampling, clipping correction, different interpolation, or arithmetic changes in order to reduce any input-versus-output difference.
+- Compare **output-to-output** only to verify repeatability (same inputs/events and build) or the transparency of instrumentation (capture on/off). Those are integrity checks, **not** attempts to make the machine's output resemble its input.
+- Measure and archive input/output differences as evidence: first-difference timing, amplitude, spectral changes and multi-voice behavior, without forcing the signal to converge.
+- If an engineering defect is suspected, require independent evidence about intended emulated-device semantics and explain the defect separately. **PCM mismatch alone never authorizes a fix.**
+- Distinguish the MAME reconstructed DSP from verified original Akai silicon; differences are not automatically a sound-quality judgement.
 
 ## Pinned reference
 

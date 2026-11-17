@@ -26,3 +26,7 @@ With no `L6028_SAMPLE_PACK` environment variable the original two-voice fixture 
 - The output WAV is MAME's **speaker-side PCM16**, not a verified silicon DAC-latch bitstream.
 - The public CI synthesizes eight harmless PCM16 WAVs and runs the same packer and eight-voice playback mode using a trace-disabled build. The user's original sample data never enters CI.
 - New pack-mode source and CI are not considered functioning until the actual MAME compilation and execution pass.
+
+## Important goal boundary
+
+**Do not match output PCM to input PCM.** The source WAVs remain unmodified when loaded; the L6028's output may naturally differ through its interpolation, filter, envelope, gain, mix and timing. Preserve that consequence. The source-waveform hashes in the local pack manifest check only **input-data integrity**, not expected output equality. PCM output comparisons between identical runs or trace ON/OFF are **reproducibility/transparency tests**, not input-output matching. See [hard research rule](README.md#non-goal-inputoutput-pcm-equality-hard-research-rule).
