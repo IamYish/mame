@@ -186,7 +186,18 @@ TIMER_CALLBACK_MEMBER(l6028lab_state::test_step)
 		// Force the device's stream updater through the final fixture boundary.
 		m_dsp->lab_host_w(0x00, 0x0000);
 		logerror("L6028_LAB_DONE voices=2\n");
-		machine().schedule_exit();
+		if (std::getenv("L6028_NATIVE_FLUSH"))
+		{
+			// Keep the frozen short PCM reference unchanged unless requested.
+			// Release voices only AFTER rendering their original 2269 frames.
+			stop_voice(0);
+			stop_voice(1);
+			m_test_timer->adjust(attotime::from_ticks(4096, SAMPLE_RATE), 6);
+		}
+		else
+		{
+			machine().schedule_exit();
+		}
 		break;
 	case 4:
 	{
@@ -209,6 +220,10 @@ TIMER_CALLBACK_MEMBER(l6028lab_state::test_step)
 	case 5:
 		m_dsp->lab_host_w(0x00, 0x0000);
 		logerror("L6028_PACK_DONE voices=8\n");
+		machine().schedule_exit();
+		break;
+	case 6:
+		logerror("L6028_LAB_NATIVE_FLUSH_DONE\n");
 		machine().schedule_exit();
 		break;
 	}

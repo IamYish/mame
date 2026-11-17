@@ -68,9 +68,10 @@ jobs:
         env:
           SDL_AUDIODRIVER: dummy
           SDL_VIDEODRIVER: dummy
+          L6028_NATIVE_FLUSH: '1'
         run: |
           ./l6028lab l6028lab -log -seconds_to_run 1 -nothrottle -video none -sound sdl -samplerate 44100 -wavwrite l6028-proof/host-on.wav > l6028-proof/host-on-console.log 2>&1
-          python3 -c 'import wave; w=wave.open("l6028-proof/host-on.wav", "rb"); assert w.getframerate()==44100 and w.getnframes()>100 and w.getsampwidth()==2; assert any(w.readframes(w.getnframes()))'
+          python3 -c 'import wave; w=wave.open("l6028-proof/host-on.wav", "rb"); assert w.getframerate()==44100 and w.getnframes()>=2269 and w.getsampwidth()==2; assert any(w.readframes(w.getnframes()))'
       - name: Repeat identical machine execution and demand bit-identical PCM
         env:
           SDL_AUDIODRIVER: dummy
@@ -113,6 +114,7 @@ jobs:
         env:
           SDL_AUDIODRIVER: dummy
           SDL_VIDEODRIVER: dummy
+          L6028_NATIVE_FLUSH: '1'
         run: |
           mkdir -p l6028-off
           set +e
@@ -125,7 +127,7 @@ jobs:
         run: |
           python3 scripts/l6028_fixture_check.py l6028-off/error.log
           if grep -q 'L6028_TAP ' l6028-off/error.log; then echo 'Unexpected trace output'; exit 1; fi
-          python3 -c 'import wave; w=wave.open("l6028-off/host-off.wav", "rb"); assert w.getframerate()==44100 and w.getnframes()>100 and w.getsampwidth()==2; assert any(w.readframes(w.getnframes()))'
+          python3 -c 'import wave; w=wave.open("l6028-off/host-off.wav", "rb"); assert w.getframerate()==44100 and w.getnframes()>=2269 and w.getsampwidth()==2; assert any(w.readframes(w.getnframes()))'
       - name: Exercise eight-voice pack playback using synthetic PCM16 (private user WAVs are never uploaded)
         env:
           SDL_AUDIODRIVER: dummy
