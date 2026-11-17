@@ -41,15 +41,21 @@ jobs:
           make -j3 SOURCES=src/mame/akai/l6028lab.cpp SUBTARGET=l6028lab REGENIE=1
       - name: Check machine registration
         run: |
-          ./mamel6028lab -listfull l6028lab
+          # MAME's source-filtered subtarget is linked as "l6028lab", not "mamel6028lab".
+          test -x ./l6028lab
+          ./l6028lab -listfull l6028lab
       - name: Render 2-voice fixture using L6028 model
         env:
           SDL_AUDIODRIVER: dummy
           SDL_VIDEODRIVER: dummy
         run: |
           mkdir -p l6028-proof
-          ./mamel6028lab l6028lab -log -seconds_to_run 1 -throttle 0 -video none -sound none > l6028-proof/console.log 2>&1
-          cp error.log l6028-proof/error.log
+          set +e
+          ./l6028lab l6028lab -log -seconds_to_run 1 -throttle 0 -video none -sound none > l6028-proof/console.log 2>&1
+          status=$?
+          set -e
+          if test -f error.log; then cp error.log l6028-proof/error.log; fi
+          exit "$status"
       - name: Check 10-channel trace and export exact MAME float32 output
         run: |
           python3 scripts/l6028_fixture_check.py l6028-proof/error.log --require-trace

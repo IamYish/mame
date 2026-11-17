@@ -21,10 +21,10 @@ The MAME build is normally made using its MSYS2 toolchain, not only Visual Studi
 make -j8 SOURCES=src/mame/akai/l6028lab.cpp SUBTARGET=l6028lab
 ```
 
-Locate the executable produced by your particular build. Example:
+The Linux source-filtered build linked the executable as `l6028lab` in GitHub Actions. Example:
 
 ```bash
-./mamel6028lab l6028lab -log -seconds_to_run 1 -throttle 0 -video none -wavwrite l6028-mame-mix.wav
+./l6028lab l6028lab -log -seconds_to_run 1 -throttle 0 -video none -wavwrite l6028-mame-mix.wav
 ```
 
 Alternatively use `./mame l6028lab ...` if building the normal MAME target. In `error.log`, verify `L6028_LAB_BEGIN`, `L6028_LAB_OVERLAP` and `L6028_LAB_DONE`. The first trace is a **MAME mixer output**, not a verified Akai DAC-input capture.
@@ -65,3 +65,7 @@ Check `Actions → L6028 ROM-free PCM playback proof` in GitHub. If no run is re
 
 The first GitHub Actions build failed when compiling the lab driver, before any sound was generated:
 `WRITE_LINE_MEMBER(dma_request)` is no longer a valid declaration in this pinned MAME revision. The callback is now a normal `void dma_request(int state)` member, matching other MAME driver callback implementations. The original L6028 playback arithmetic is unchanged. Re-run the focused workflow and inspect the next build error or PCM evidence; no success is claimed merely from correcting source.
+
+## Native build outcome 2 — compiler and linker PASS
+
+The follow-up job (GitHub Actions run `44086925666`, commit `93cb8289`) successfully compiled `src/mame/akai/l6028lab.cpp` **and** `l7a1045_l6028_dsp_a.cpp`, generated exactly one driver and linked `l6028lab`. Runtime inspection failed with exit code 127 only because the workflow invoked `./mamel6028lab`, which is not the linked filename. The dedicated CI now executes `./l6028lab` and copies `error.log` for diagnosis even when a runtime error occurs. No audio was rendered during the preceding failed CI run.
