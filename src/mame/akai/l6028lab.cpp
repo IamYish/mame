@@ -43,6 +43,7 @@ private:
 
 	void pcm_map(address_map &map) ATTR_COLD;
 	void load_samples();
+	void replay_single_note();
 	bool load_private_pack();
 	void stop_voice(u8 voice);
 	void probe_atomic_envelope();
@@ -71,6 +72,77 @@ void l6028lab_state::load_samples()
 		ram.write_word((SAMPLE_A + i) << 1, u16(s16(a)));
 		ram.write_word((SAMPLE_B + i) << 1, u16(s16(b)));
 	}
+}
+
+void l6028lab_state::replay_single_note()
+{
+	// Note setup and key-on from the local OS 1.20 host trace, in bus order.
+	// This probe keeps order but coalesces the sub-sample bus delays.
+	struct transaction { u16 offset; u16 value; bool read; };
+	constexpr transaction commands[] = {
+        { 0x00, 0x0002, false },
+        { 0x06, 0x0100, false },
+        { 0x04, 0x1268, false },
+        { 0x02, 0x0000, false },
+        { 0x00, 0x0102, false },
+        { 0x02, 0x1000, false },
+        { 0x04, 0xffff, false },
+        { 0x06, 0x000f, false },
+        { 0x00, 0x0202, false },
+        { 0x04, 0x0000, false },
+        { 0x02, 0x0000, false },
+        { 0x00, 0x0302, false },
+        { 0x0c, 0x0000, false },
+        { 0x00, 0x0402, false },
+        { 0x02, 0x3fff, false },
+        { 0x04, 0xbfff, false },
+        { 0x00, 0x0502, false },
+        { 0x02, 0x0000, false },
+        { 0x04, 0x3fff, false },
+        { 0x00, 0x0602, false },
+        { 0x02, 0x0000, false },
+        { 0x04, 0x7ff0, false },
+        { 0x00, 0x0702, false },
+        { 0x04, 0x0000, false },
+        { 0x02, 0xb4b4, false },
+        { 0x08, 0x0000, true },
+        { 0x08, 0x0100, false },
+	};
+
+	constexpr u32 captured_start = 0x12680;
+	address_space &ram = m_dsp->space(AS_DATA);
+	char const *filename = std::getenv("L6028_REPLAY_PCM");
+	if (!filename || !*filename)
+		fatalerror("L6028 replay requires local PCM16LE via L6028_REPLAY_PCM");
+	std::ifstream input(filename, std::ios::binary);
+	if (!input)
+		fatalerror("Cannot open replay PCM");
+	u32 count = 0;
+	char bytes[2];
+	while (input.read(bytes, 2))
+	{
+		if (count >= 0x100000)
+			fatalerror("Replay PCM exceeds limit");
+		ram.write_word((captured_start + count++) << 1,
+			u16(u8(bytes[0])) | (u16(u8(bytes[1])) << 8));
+	}
+	if (!input.eof() || input.gcount() || !count)
+		fatalerror("Replay PCM must contain complete PCM16LE samples");
+
+	for (transaction const &command : commands)
+	{
+		if (command.read)
+		{
+			u16 const actual = m_dsp->lab_host_r(command.offset);
+			if (actual != command.value)
+				fatalerror("L6028 replay: port %04x read %04x, expected %04x", 0x80 + command.offset, actual, command.value);
+		}
+		else
+		{
+			m_dsp->lab_host_w(command.offset, command.value);
+		}
+	}
+	logerror("L6028_SINGLE_NOTE_BEGIN voice=2 start=00012680\n");
 }
 
 bool l6028lab_state::load_private_pack()
@@ -202,6 +274,12 @@ TIMER_CALLBACK_MEMBER(l6028lab_state::test_step)
 	switch (param)
 	{
 	case 0:
+		if (std::getenv("L6028_SINGLE_NOTE_REPLAY"))
+		{
+			replay_single_note();
+			m_test_timer->adjust(attotime::from_ticks(22050, SAMPLE_RATE), 7);
+			break;
+		}
 		if (std::getenv("L6028_ATOMIC_PROBE"))
 		{
 			probe_atomic_envelope();
@@ -278,6 +356,11 @@ TIMER_CALLBACK_MEMBER(l6028lab_state::test_step)
 		break;
 	case 6:
 		logerror("L6028_LAB_NATIVE_FLUSH_DONE\n");
+		machine().schedule_exit();
+		break;
+	case 7:
+		stop_voice(2);
+		logerror("L6028_SINGLE_NOTE_DONE\n");
 		machine().schedule_exit();
 		break;
 	}
