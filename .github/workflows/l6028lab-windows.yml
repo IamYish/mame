@@ -1,0 +1,91 @@
+name: L6028 playback lab Windows x64
+on:
+  push:
+    branches: [lab/l6028-capture]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-windows:
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-python
+      - name: Build the focused native Windows executable
+        shell: msys2 {0}
+        run: make -j3 SOURCES=src/mame/akai/l6028lab.cpp SUBTARGET=l6028lab REGENIE=1 USE_QTDEBUG=0
+      - name: Stage the executable and audit its DLL imports
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          mkdir package
+          cp l6028lab.exe COPYING package/
+          objdump -f package/l6028lab.exe | grep 'file format pei-x86-64'
+          system32="$(cygpath -u "$WINDIR")/System32"
+          pending=(package/l6028lab.exe)
+          for ((index=0; index<${#pending[@]}; index++)); do
+            binary="${pending[index]}"
+            imports="$(objdump -p "$binary" | awk '/DLL Name:/ {print $3}')"
+            for dll in $imports; do
+              printf '%s imports %s\n' "${binary##*/}" "$dll"
+              case "${dll,,}" in
+                api-ms-win-*|ext-ms-win-*) continue ;;
+              esac
+              if [[ -f "$system32/$dll" || -f "package/$dll" ]]; then
+                continue
+              fi
+              test -f "/ucrt64/bin/$dll"
+              cp "/ucrt64/bin/$dll" package/
+              pending+=("package/$dll")
+            done
+          done | tee package/imports.txt
+          printf '%s\n' "$GITHUB_SHA" > package/source-commit.txt
+      - name: Smoke-test the package with a Windows-only PATH
+        shell: pwsh
+        run: |
+          $env:Path = "$env:SystemRoot\System32;$env:SystemRoot"
+          $stage = (Resolve-Path package).Path
+          $exe = Join-Path $stage 'l6028lab.exe'
+          function Invoke-Probe($name, $commandLine) {
+            $out = Join-Path $env:RUNNER_TEMP "$name.out"
+            $err = Join-Path $env:RUNNER_TEMP "$name.err"
+            $process = Start-Process -FilePath $exe -ArgumentList $commandLine -WorkingDirectory $stage -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err -PassThru
+            if (-not $process.WaitForExit(60000)) {
+              $process.Kill()
+              throw "Timed out: $name"
+            }
+            $output = Get-Content $out -Raw
+            Write-Host $output
+            Get-Content $err | Write-Host
+            if ($process.ExitCode -ne 0) {
+              throw "$name exited with $($process.ExitCode)"
+            }
+            return $output
+          }
+          $systems = Invoke-Probe 'systems' 'l6028lab -listfull'
+          $drivers = @($systems -split '\r?\n' | Where-Object { $_ -match '^\w+\s+"' })
+          if ($drivers.Count -ne 1 -or $drivers[0] -notmatch '^l6028lab\s') { throw 'Unexpected driver list' }
+          $null = Invoke-Probe 'rom-free-smoke' 'l6028lab -noreadconfig -video none -sound none -seconds_to_run 2 -nothrottle'
+          Get-ChildItem $stage -File | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object {
+            $hash = Get-FileHash $_.FullName -Algorithm SHA256
+            "$($hash.Hash.ToLowerInvariant())  $($_.Name)"
+          } | Set-Content (Join-Path $stage 'SHA256SUMS.txt')
+      - name: Upload the ROM-free Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: l6028lab-windows-x64
+          if-no-files-found: error
+          path: |
+            package/*.exe
+            package/*.dll
+            package/COPYING
+            package/imports.txt
+            package/source-commit.txt
+            package/SHA256SUMS.txt
