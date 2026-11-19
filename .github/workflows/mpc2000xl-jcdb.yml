@@ -1,0 +1,145 @@
+name: MPC2000XL jcdb source map (no emulator build)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compilation-database:
+    name: Generate original MPC2000XL compile database
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out MAME fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install basic generator prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3
+
+      - name: Run MAME's own single-driver jcdb generator
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/mpc2000xl-jcdb
+          if ! make SUBTARGET=mpcxl SOURCES=src/mame/akai/mpc2000.cpp jcdb \
+              > out/mpc2000xl-jcdb/jcdb.log 2>&1; then
+            tail -n 200 out/mpc2000xl-jcdb/jcdb.log
+            exit 1
+          fi
+          tail -n 35 out/mpc2000xl-jcdb/jcdb.log
+
+      - name: Save compilation database, selected source list and source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import subprocess
+          import zipfile
+
+          root = Path.cwd().resolve()
+          out = root / "out/mpc2000xl-jcdb"
+          databases = sorted((root / "build").rglob("compile_commands.json"),
+                             key=lambda p: p.stat().st_size, reverse=True)
+          if not databases:
+              raise SystemExit("ERROR: jcdb produced no compile_commands.json under build/")
+          db = databases[0]
+          raw = json.loads(db.read_text(encoding="utf-8"))
+          if not isinstance(raw, list):
+              raise SystemExit("ERROR: compile_commands.json is not an array")
+
+          source_paths = set()
+          missing = []
+          for item in raw:
+              file = Path(item["file"])
+              cwd = Path(item.get("directory") or root)
+              for candidate in ((cwd / file).resolve(), (root / file).resolve()):
+                  if candidate.is_file() and candidate.is_relative_to(root):
+                      source_paths.add(candidate.relative_to(root).as_posix())
+                      break
+              else:
+                  missing.append(str(file))
+
+          required = {
+              "src/mame/akai/mpc2000.cpp",
+              "src/devices/cpu/nec/v5x.cpp",
+              "src/devices/cpu/upd7810/upd7810.cpp",
+              "src/devices/sound/l7a1045_l6028_dsp_a.cpp",
+              "src/emu/schedule.cpp",
+              "src/emu/diexec.cpp",
+          }
+          unselected = sorted(required - source_paths)
+          if unselected:
+              raise SystemExit("ERROR: original MPC or core units absent from jcdb: "
+                               + ", ".join(unselected))
+
+          (out / "compile_commands.json").write_text(
+              json.dumps(raw, indent=2) + "\n", encoding="utf-8"
+          )
+          sources = sorted(source_paths)
+          (out / "compiled-source-paths.txt").write_text(
+              "\n".join(sources) + "\n", encoding="utf-8"
+          )
+          manifest = {
+              "origin": "IamYish/mame",
+              "commit": subprocess.check_output(["git", "rev-parse", "HEAD"],
+                                                 text=True).strip(),
+              "driver": "src/mame/akai/mpc2000.cpp",
+              "jcdb_path": db.relative_to(root).as_posix(),
+              "commands": len(raw),
+              "selected_translation_units": len(sources),
+              "missing_or_generated_inputs": sorted(set(missing)),
+              "status": "build-generator compilation database; not compile-tested",
+              "header_dependency_closure": False,
+              "link_dependency_closure": False,
+              "independent_build_verified": False,
+              "selected_files": [
+                  {"path": p,
+                   "sha256": hashlib.sha256((root / p).read_bytes()).hexdigest()}
+                  for p in sources
+              ],
+          }
+          (out / "manifest.json").write_text(
+              json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+          )
+          (out / "README.txt").write_text(
+              "Original MAME MPC2000XL compilation database, generated with:\n"
+              "make SUBTARGET=mpcxl SOURCES=src/mame/akai/mpc2000.cpp jcdb\n\n"
+              "Selected source units are included in a separate source ZIP.\n"
+              "This is NOT a complete independently buildable MAME slice:\n"
+              "required headers, code-generated files, platform glue and link\n"
+              "libraries still need to be resolved and verified separately.\n"
+              "No Akai ROM files are included. No C conversion has begun.\n",
+              encoding="utf-8"
+          )
+          archive = out / "mpc2000xl-selected-translation-units.zip"
+          with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6,
+                               allowZip64=True) as z:
+              for p in sources:
+                  z.write(root / p, p)
+              for name in ("README.txt", "compiled-source-paths.txt", "manifest.json"):
+                  z.write(out / name, "_slice_metadata/" + name)
+          print(f"jcdb: {len(raw)} compilation entries; "
+                f"{len(sources)} existing translation units; "
+                f"{len(missing)} unresolved/generated inputs")
+          print(f"Source units ZIP: {archive.stat().st_size} bytes")
+          PY
+
+      - name: Upload jcdb evidence and files (including failure log)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpc2000xl-jcdb-source-map
+          path: out/mpc2000xl-jcdb/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 0
