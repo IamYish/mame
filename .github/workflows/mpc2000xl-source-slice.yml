@@ -1,0 +1,70 @@
+name: Extract original MPC2000XL MAME source slice
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - mpcxl-source-slice
+    paths:
+      - '.github/workflows/mpc2000xl-source-slice.yml'
+      - '.github/scripts/collect_mpc2000xl_slice.py'
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    name: Targeted build and dependency-derived source archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out original fork revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential python3 \
+            libsdl2-dev libsdl2-ttf-dev libfontconfig-dev \
+            libasound2-dev libxinerama-dev libxi-dev \
+            qt6-base-dev qt6-base-dev-tools
+
+      - name: Build selected original MPC2000XL driver (not the diagnostic fork)
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p dist/mpc2000xl-source-slice
+          make -j3 REGENIE=1 \
+            SUBTARGET=mpc2000xl_slice \
+            SOURCES=src/mame/akai/mpc2000.cpp \
+            SYMBOLS=0 NOWERROR=1 VERBOSE=1 \
+            2>&1 | tee dist/mpc2000xl-source-slice/build.log
+
+      - name: Extract actual compiled source and header inputs
+        run: |
+          python3 .github/scripts/collect_mpc2000xl_slice.py \
+            --log dist/mpc2000xl-source-slice/build.log \
+            --out dist/mpc2000xl-source-slice
+
+      - name: Trim full build log from artifact
+        if: always()
+        shell: bash
+        run: |
+          if [ -f dist/mpc2000xl-source-slice/build.log ]; then
+            tail -n 500 dist/mpc2000xl-source-slice/build.log > dist/mpc2000xl-source-slice/build-log-last-500.txt
+            rm -f dist/mpc2000xl-source-slice/build.log
+          fi
+
+      - name: Upload source slice and audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mpc2000xl-original-mame-source-slice
+          path: dist/mpc2000xl-source-slice/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 0
